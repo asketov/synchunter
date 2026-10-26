@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Question of the Day</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 520px; margin: 40px auto; padding: 0 16px; }
+    textarea { width: 100%; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Question of the Day</h1>
+  <p data-testid="pair-status">Loading...</p>
+  <p>What made you smile today?</p>
+  <textarea data-testid="answer-input" rows="3"></textarea>
+  <p>
+    <button data-testid="submit-answer">Submit answer</button>
+    <button data-testid="leave-pair">Leave pair</button>
+  </p>
+  <p data-testid="reveal"></p>
+  <p class="error" id="error"></p>
+
+  <script>
+    const user = new URLSearchParams(location.search).get("user") || "A";
+    const POLL_MS = __POLL_MS__;
+    const $ = (selector) => document.querySelector(selector);
+
+    async function refresh() {
+      const me = await (await fetch(`/api/me?user=${user}`)).json();
+
+      const status = $("[data-testid=pair-status]");
+      status.dataset.state = me.paired ? "paired" : "unpaired";
+      status.textContent = me.paired ? `${user}, you are paired with ${me.partner}` : `${user}, you are not paired`;
+
+      const reveal = $("[data-testid=reveal]");
+      reveal.dataset.state = !me.paired ? "none" : me.revealed ? "revealed" : me.answered ? "waiting" : "open";
+      reveal.textContent = me.revealed
+        ? me.answers.map((a) => `${a.user}: ${a.text}`).join(" | ")
+        : me.answered ? "Waiting for your partner..." : "";
+    }
+
+    async function post(path, extra) {
+      $("#error").textContent = "";
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user, ...extra }),
+      });
+      if (!response.ok) $("#error").textContent = (await response.json()).detail || response.statusText;
+      await refresh();
+    }
+
+    $("[data-testid=submit-answer]").onclick = () => post("/api/answer", { text: $("[data-testid=answer-input]").value });
+    $("[data-testid=leave-pair]").onclick = () => post("/api/pair/leave", {});
+
+    refresh();
+    setInterval(refresh, POLL_MS);
+  </script>
+</body>
+</html>

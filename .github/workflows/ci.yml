@@ -1,0 +1,29 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          pip install -e ".[dev]"
+          playwright install --with-deps chromium
+      - name: Unit tests
+        run: pytest -q
+      - name: End-to-end demo
+        run: |
+          synchunter demo-app &
+          for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:8765/ && break; sleep 1; done
+          synchunter run scenarios/demo_couple_app.yaml --strategy interleave --out out
+          grep -q "reveal-when-both-answered" out/report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report
+          path: out/

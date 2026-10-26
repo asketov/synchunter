@@ -1,0 +1,44 @@
+# SyncHunter scenario for the bundled demo app (demo_app/app.py).
+name: demo-couple-app
+description: >
+  A couple app (a simplified Twekle). Two partners, A and B, form a pair. Each partner can
+  answer the Question of the Day; the answers are revealed to both partners only after both
+  have answered. A partner can leave the pair, which deletes the pair and its answers.
+
+base_url: http://127.0.0.1:8765
+
+# One browser context per simulated user: user id -> start page.
+users:
+  A: /?user=A
+  B: /?user=B
+
+# Test hooks: put the app into a known state, and read its full server-side state.
+reset: {method: POST, path: /__reset}
+state: {method: GET, path: /api/state}
+
+# The page is ready once the first status has been rendered.
+ready_selector: "[data-testid=pair-status][data-state]"
+# Which elements count as user actions during exploration.
+action_selector: "button[data-testid]"
+# Text typed into inputs before actions run, so actions fire instantly during execution.
+inputs:
+  "[data-testid=answer-input]": "I liked our walk"
+
+# What each user sees. shared: true means all users must see the same value.
+observables:
+  - {name: pair_status, selector: "[data-testid=pair-status]", attr: data-state, shared: true}
+  - {name: reveal, selector: "[data-testid=reveal]", attr: data-state, shared: false}
+
+# Rules over the server state (Python expressions over `state`) that must always hold.
+invariants:
+  - name: answers-belong-to-existing-pair
+    rationale: Every stored answer must reference a pair that still exists.
+    expr: "all(a['pair_id'] in {p['id'] for p in state['pairs']} for a in state['answers'])"
+  - name: reveal-when-both-answered
+    rationale: Once every member of a pair has answered, the answers must be revealed.
+    expr: "all(p['revealed'] or {a['user'] for a in state['answers'] if a['pair_id'] == p['id']} != set(p['members']) for p in state['pairs'])"
+
+# Timing (milliseconds).
+settle_ms: 1200          # wait after the last action before observing
+sequential_gap_ms: 800   # gap between actions in turn-taking (sequential) runs
+offsets_ms: [0, 50, 120, 250]  # start offsets tried for concurrent runs
